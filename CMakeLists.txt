@@ -42,8 +42,7 @@ FetchContent_MakeAvailable(
 add_library(shulke SHARED
     src/main.cpp
     src/item/itemstackbase.cpp
-    src/nbt/listtag.cpp
-    src/nbt/compoundtag.cpp
+    src/nbt/nbt.cpp
     src/ui/minecraftuirendercontext.cpp
     src/ui/nineslicehelper.cpp
     src/shulkerenderer/shulkerrenderer.cpp

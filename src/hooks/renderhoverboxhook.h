@@ -33,6 +33,7 @@ inline void HoverRenderer_renderHoverBox_hook(
         return;
     }
 
+    //toggle prev key
     if (!spKeyDown && sWasToggleKeyDown)
         sPreviewEnabled = !sPreviewEnabled;
     sWasToggleKeyDown = spKeyDown;
@@ -42,12 +43,14 @@ inline void HoverRenderer_renderHoverBox_hook(
 
     const std::string& text = self->mFilteredContent;
 
+    //marker
     if (text.find("\xC2\xA7v") == std::string::npos)
         return;
 
-    if (text.size() < 6)
+    //prefix must contain §H§L§C
+    if (text.size() < 9)
         return;
-
+    //decode cache index
     char hi = text[2];
     char lo = text[5];
     int index = (hex(hi) << 4) | hex(lo);
@@ -56,11 +59,8 @@ inline void HoverRenderer_renderHoverBox_hook(
     if (index < 0 || index >= SHULKER_CACHE_SIZE)
         return;
 
-    size_t colorPos = text.find("\xC2\xA7#", 0);
-    if (colorPos == std::string::npos || colorPos + 3 >= text.size())
-        return;
-
-    char colorCode = text[colorPos + 3];
+    // decode color code
+    char colorCode = text[8];
 
     float px = self->mCursorX + self->mOffsetX;
     float py = self->mCursorY + self->mOffsetY + self->mBoxHeight;

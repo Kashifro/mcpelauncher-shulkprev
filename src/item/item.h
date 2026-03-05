@@ -38,8 +38,7 @@ public:
     virtual void vfunc32() = 0;
     virtual void vfunc33() = 0;
     virtual void vfunc34() = 0;
-    virtual short getMaxDamage() const; 
+    virtual void vfunc35() = 0;// 1.21.114
+    virtual short getMaxDamage() const; // 1.24
 };
-
-using Item_getId_t = unsigned short (*)(void*);
-extern Item_getId_t Item_getId; 
+// prolly getting deleted in the future might just use offsets 

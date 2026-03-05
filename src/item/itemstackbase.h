@@ -28,19 +28,10 @@ public:
 
 };
 
-using ItemStackBase_ctor_t = void (*)(ItemStackBase*);
-extern ItemStackBase_ctor_t ItemStackBase_ctor;
-
 using ItemStackBase_loadItem_t = void (*)(void* stack, void* compound);
 extern ItemStackBase_loadItem_t ItemStackBase_loadItem;
 
-using ItemStackBase_getName_t = std::string* (*)(std::string*, ItemStackBase*);
-extern ItemStackBase_getName_t ItemStackBase_getName;
-
 using ItemStackBase_getDamageValue_t = short (*)(ItemStackBase*);
 extern ItemStackBase_getDamageValue_t ItemStackBase_getDamageValue;
-
-using ItemStackBase_getItem_t = void* (*)(ItemStackBase*); 
-extern ItemStackBase_getItem_t ItemStackBase_getItem;
 
 static_assert(sizeof(ItemStackBase) == 0x88, "Incorrect ItemStackBase size");

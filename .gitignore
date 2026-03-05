@@ -1,4 +1,5 @@
 #folders
 build/
-build.sh
+*.sh
 test/
+RE/

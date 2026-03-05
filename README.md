@@ -2,7 +2,7 @@
 
 A mod for [mcpelauncher](https://github.com/minecraft-linux/mcpelauncher-manifest) that adds shulker box content previews.
 
-This mod currently supports **Minecraft Bedrock 1.21.114**.
+<!-- This mod currently supports **Minecraft Bedrock 1.21.114**. -->
 
 ## Usage
 Create a `mods` directory in your mcpelauncher profile (for example `~/.local/share/mcpelauncher/mods`) if you do not already have one.
