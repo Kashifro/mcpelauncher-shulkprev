@@ -24,7 +24,7 @@ int SP_clampPercent(int value) {
 }
 
 std::string SP_getConfigPath() {
-    return "/data/data/com.mojang.minecraftpe/shulkerpreview.conf";
+    return "../shulkerpreview.conf";
 }
 
 void SP_loadConfig() {
