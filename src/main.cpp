@@ -95,13 +95,4 @@ extern "C" [[gnu::visibility("default")]] void mod_init()
     HoverRenderer_renderHoverBox_orig =
         reinterpret_cast<RenderHoverBoxFn>(vtHR[17]);
     vtHR[17] = reinterpret_cast<void *>(&HoverRenderer_renderHoverBox_hook);
-
-    auto _ZTSMCUIRC = hat::find_pattern(range1, hat::object_to_signature("24MinecraftUIRenderContext")).get();
-    auto _ZTIMCUIRC = hat::find_pattern(range2, hat::object_to_signature(_ZTSMCUIRC)).get() - sizeof(void *);
-    auto _ZTVMCUIRC = hat::find_pattern(range2, hat::object_to_signature(_ZTIMCUIRC)).get() + sizeof(void *);
-    // slot 6
-    void **vtMCUIRC = reinterpret_cast<void **>(_ZTVMCUIRC);
-    MinecraftUIRenderContext_drawText_orig =
-        reinterpret_cast<MinecraftUIRenderContext_drawText_t>(vtMCUIRC[6]);
-    vtMCUIRC[6] = reinterpret_cast<void *>(&MinecraftUIRenderContext_drawText_hook);
 }
