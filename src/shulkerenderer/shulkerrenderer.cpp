@@ -190,28 +190,28 @@ void drawSlotTexture(
     );
 }
 
+//text rendering now uses drawDebugText instead of ActiveUIContext */
 void drawStackCountText(
-    Font& font,
+    MinecraftUIRenderContext& ctx,
     float slotX,
     float slotY,
     const char* text,
     const TextMeasureData& measure,
     const CaretMeasureData& caret)
 {
-    float w = ActiveUIContext->getLineLength(font,text,measure.fontSize,false);
-
     float ax=slotX+kSlotDrawSize-0.5f;
     float ay=slotY+kSlotDrawSize-1.5f;
 
     RectangleArea r{
-        ax-w,
+        ax-20.0f,
         ax,
         ay-kCountTextHeight,
         ay
     };
 
-    ActiveUIContext->drawText(
-        font,r,text,
+    ctx.drawDebugText(
+        r,
+        text,
         mce::Color{1,1,1,1},
         ui::TextAlignment::Right,
         1.0f,
@@ -338,7 +338,7 @@ void ShulkerRenderer::render(
     int index,
     char colorCode)
 {
-    if(!ctx || !ActiveUIContext || !ActiveUIFont)
+    if(!ctx)
         return;
 
     const mce::Color tint=
@@ -360,10 +360,9 @@ void ShulkerRenderer::render(
     float ox=x+kPanelPadding;
     float oy=y+kPanelPadding;
 
-    Font& font=*ActiveUIFont;
-
     TextMeasureData measure{};
     measure.fontSize=1.0f;
+    measure.renderShadow=true;
 
     CaretMeasureData caret{};
 
@@ -393,7 +392,7 @@ void ShulkerRenderer::render(
         char txt[8];
         std::snprintf(txt,sizeof(txt),"%u",sc.count);
 
-        drawStackCountText(font,sx,sy,txt,measure,caret);
+        drawStackCountText(*ctx,sx,sy,txt,measure,caret);
     });
 
     ctx->flushText(0.0f,std::nullopt);

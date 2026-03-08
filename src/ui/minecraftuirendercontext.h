@@ -112,11 +112,21 @@ class CustomRenderComponent;
 class ClientInstance;
 class ScreenContext;
 class UIRepository;
-class FontHandle;
 class UIScene;
 namespace Core {
 class Path;
 }
+//minFontHandle
+class FontHandle {
+public:
+    std::byte mFontRepository[24]; // NonOwnerPointer<FontRepository>
+    std::byte mDefaultFont[16];    // std::shared_ptr<Font>
+    uint64_t  mFontId;
+    bool      mIsDummyHandle;
+    std::byte _pad[7];
+};
+
+static_assert(sizeof(FontHandle) == 56);
 
 class MinecraftUIRenderContext {
 public:
