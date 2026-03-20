@@ -40,3 +40,4 @@ This produces `libshulke.so` in `build/`. Install it as described in [Usage](#us
 ## Bugs
 - Fence gates have missing textures.
 - Leather armor has partial textures.
+- [see](https://github.com/Kashifro/mcpelauncher-shulkprev/issues/9)
