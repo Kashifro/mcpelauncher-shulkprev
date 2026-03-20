@@ -36,3 +36,7 @@ This produces `libshulke.so` in `build/`. Install it as described in [Usage](#us
 ## Preview
 
 ![ShulkerBox Preview](1.png)
+
+## Bugs
+- Fence gates have missing textures.
+- Leather armor has partial textures.
