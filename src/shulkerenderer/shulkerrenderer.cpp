@@ -61,16 +61,15 @@ ItemStackBase* getRenderableStack(ShulkerSlotCache& cache){
     if(!cache.valid) return nullptr;
 
     ItemStackBase* stack = asISB(cache.isb);
-    if(!stack) return nullptr;
-    if(!stack->mItem.get()) return nullptr;
+    if(!stack || !stack->mItem.get()) return nullptr;
 
-    return stack;
+        return stack;
 }
 
 bool hasEnchantedSlots(int cacheIndex){
     for(int i=0;i<SHULKER_SLOT_COUNT;i++){
         const ShulkerSlotCache& sc=ShulkerCache[cacheIndex][i];
-        if(sc.valid && sc.enchanted)
+        if(sc.valid && sc.enchanted) 
             return true;
     }
     return false;
@@ -83,7 +82,7 @@ void* getMinecraftGame(void* clientInstance){
 
     if(vt && vt[kClientGetMinecraftGameVfIndex]){
         auto fn = (void*(*)(void*))vt[kClientGetMinecraftGameVfIndex];
-        if(void* r = fn(clientInstance))
+        if(void* r = fn(clientInstance)) 
             return r;
     }
 
@@ -129,11 +128,10 @@ void drawDurabilityBar(
 
     ctx.fillRectangle(bg,mce::Color{0,0,0,1},1.0f);
 
-    float barWidth=13.0f*ratio;
 
     RectangleArea bar{
         bx,
-        bx+barWidth,
+        bx+13.0f*ratio,
         by,
         by+1.0f
     };
@@ -164,8 +162,8 @@ void drawPanelTexture(
     const CachedUiTextures& tex,
     const RectangleArea& rect)
 {
-    if(!hasTexture(tex.panel)) return;
-    kPanelNineSlice.draw(ctx,rect,tex.panel.getClientTexture());
+    if(hasTexture(tex.panel))
+        kPanelNineSlice.draw(ctx,rect,tex.panel.getClientTexture());
 }
 
 void drawSlotTexture(
@@ -222,7 +220,6 @@ void drawStackCountText(
 
 void drawSlotIcons(
     MinecraftUIRenderContext& ctx,
-    const CachedUiTextures& tex,
     int cacheIndex,
     float ox,
     float oy)
@@ -232,6 +229,11 @@ void drawSlotIcons(
 
     if(!ctx.mClient || !ctx.mScreenContext)
         return;
+
+    // Batch break
+    RectangleArea dummy{-10000,-9999,-10000,-9999};
+    ctx.fillRectangle(dummy, kWhite, 1.0f);
+    ctx.flushImages(kWhite, 1.0f, kFlushMaterial);
 
     void* clientInstance=ctx.mClient;
     void* minecraftGame=getMinecraftGame(clientInstance);
@@ -255,7 +257,7 @@ void drawSlotIcons(
         return;
     }
 
-    // icon pass
+  // icon pass
     forEachSlot(ox,oy,[&](int slot,float x,float y){
 
         ShulkerSlotCache& sc=ShulkerCache[cacheIndex][slot];
@@ -263,11 +265,11 @@ void drawSlotIcons(
         ItemStackBase* stack=getRenderableStack(sc);
         if(!stack) return;
 
-        float drawX=x+kItemInset;
-        float drawY=y+kItemInset;
+        float dx=x+kItemInset;
+        float dy=y+kItemInset;
 
-        __m128 posX=_mm_set1_ps(drawX);
-        __m128 posY=_mm_set1_ps(drawY);
+        __m128 px=_mm_set1_ps(dx);
+        __m128 py=_mm_set1_ps(dy);
 
         ItemRenderer_renderGuiItemNew(
             itemRenderer,
@@ -276,7 +278,7 @@ void drawSlotIcons(
             0,
             0,
             0,
-            posX,posY,
+            px,py,
             1.0f,1.0f,1.0f
         );
     });
@@ -291,11 +293,11 @@ void drawSlotIcons(
             ItemStackBase* stack=getRenderableStack(sc);
             if(!stack) return;
 
-            float drawX=x+kItemInset;
-            float drawY=y+kItemInset;
+            float dx=x+kItemInset;
+            float dy=y+kItemInset;
 
-            __m128 posX=_mm_set1_ps(drawX);
-            __m128 posY=_mm_set1_ps(drawY);
+            __m128 px=_mm_set1_ps(dx);
+            __m128 py=_mm_set1_ps(dy);
 
             ItemRenderer_renderGuiItemNew(
                 itemRenderer,
@@ -303,28 +305,14 @@ void drawSlotIcons(
                 stack,
                 0,
                 1,
-                0,
-                posX,posY,
+                1,
+                px, py,
                 1.0f,1.0f,1.0f
             );
         });
     }
 
-    // durability bars
-    forEachSlot(ox,oy,[&](int slot,float x,float y){
-
-        ShulkerSlotCache& sc=ShulkerCache[cacheIndex][slot];
-        if(!sc.valid) return;
-
-        ItemStackBase* stack=getRenderableStack(sc);
-        if(!stack) return;
-
-        drawDurabilityBar(ctx,stack,x,y);
-    });
-
     destroyBaseActorRenderContext(barc);
-
-    ctx.flushImages(kWhite,1.0f,kFlushMaterial);
 }
 
 } // namespace
@@ -366,26 +354,34 @@ void ShulkerRenderer::render(
 
     CaretMeasureData caret{};
 
+    // slots
     forEachSlot(ox,oy,[&](int,float sx,float sy){
-
         RectangleArea rect{
             sx,
             sx+kSlotDrawSize,
             sy,
             sy+kSlotDrawSize
         };
-
         drawSlotTexture(*ctx,tex,rect);
     });
 
     ctx->flushImages(tint,1.0f,kFlushMaterial);
 
-    drawSlotIcons(*ctx,tex,index,ox,oy);
+    drawSlotIcons(*ctx,index,ox,oy);
 
     forEachSlot(ox,oy,[&](int slot,float sx,float sy){
-
         ShulkerSlotCache& sc=ShulkerCache[index][slot];
+        if(!sc.valid) return;
 
+        ItemStackBase* stack=asISB(sc.isb);
+        if(!stack) return;
+
+        drawDurabilityBar(*ctx,stack,sx,sy);
+    });
+
+    // counts
+    forEachSlot(ox,oy,[&](int slot,float sx,float sy){
+        ShulkerSlotCache& sc=ShulkerCache[index][slot];
         if(!sc.valid || sc.count<=1)
             return;
 

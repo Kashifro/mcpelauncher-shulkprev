@@ -11,7 +11,7 @@ public:
     WeakPtr<Item>   mItem;        
     CompoundTag*    mUserData;   
 
-    uint8_t _pad_18[0x88 - 0x18];
+    uint8_t _pad_18[0xA0 - 0x18];
 
     ItemStackBase();
     ItemStackBase(const ItemStackBase&);
@@ -34,4 +34,7 @@ extern ItemStackBase_loadItem_t ItemStackBase_loadItem;
 using ItemStackBase_getDamageValue_t = short (*)(ItemStackBase*);
 extern ItemStackBase_getDamageValue_t ItemStackBase_getDamageValue;
 
-static_assert(sizeof(ItemStackBase) == 0x88, "Incorrect ItemStackBase size");
+using ItemStackBase_ctor_t = void (*)(ItemStackBase*);
+extern ItemStackBase_ctor_t ItemStackBase_ctor;
+
+static_assert(sizeof(ItemStackBase) == 0xA0, "Incorrect ItemStackBase size");// probs going to cause issues xD

@@ -2,3 +2,4 @@
 
 ItemStackBase_loadItem_t ItemStackBase_loadItem = nullptr;
 ItemStackBase_getDamageValue_t ItemStackBase_getDamageValue = nullptr;
+ItemStackBase_ctor_t ItemStackBase_ctor = nullptr;

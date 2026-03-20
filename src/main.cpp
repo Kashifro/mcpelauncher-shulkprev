@@ -11,6 +11,7 @@
 
 BaseActorRenderContext_ctor_t BaseActorRenderContext_ctor = nullptr;
 ItemRenderer_renderGuiItemNew_t ItemRenderer_renderGuiItemNew = nullptr;
+void** ItemStack_vtable = nullptr;
 
 extern "C" [[gnu::visibility("default")]] void mod_preinit() {}
 extern "C" [[gnu::visibility("default")]] void mod_init()
@@ -75,6 +76,11 @@ extern "C" [[gnu::visibility("default")]] void mod_init()
     ItemRenderer_renderGuiItemNew =
     reinterpret_cast<ItemRenderer_renderGuiItemNew_t>(ItemRendererRenderGuiItemNewAddr);
 
+    auto ItemStackBase_ctor_Addr = scan(
+        "41 57 41 56 53 49 89 FE 48 8D 05 D1 3B B5 02 48 89 07 48 8D 5F 08 0F 57 C0 0F 11 47 08 0F 11 47"_sig
+    );
+    ItemStackBase_ctor = 
+    reinterpret_cast<ItemStackBase_ctor_t>(ItemStackBase_ctor_Addr);
     
     // ShulkerBoxBlockItem
     auto ZTS19ShulkerBoxBlockItem = hat::find_pattern(range1, hat::object_to_signature("19ShulkerBoxBlockItem")).get();
@@ -95,4 +101,11 @@ extern "C" [[gnu::visibility("default")]] void mod_init()
     HoverRenderer_renderHoverBox_orig =
         reinterpret_cast<RenderHoverBoxFn>(vtHR[17]);
     vtHR[17] = reinterpret_cast<void *>(&HoverRenderer_renderHoverBox_hook);
+
+    // ItemStack vptr
+    auto ZTS9ItemStack = hat::find_pattern(range1, hat::object_to_signature("9ItemStack")).get();
+    auto _ZTI9ItemStack = hat::find_pattern(range2, hat::object_to_signature(ZTS9ItemStack)).get() - sizeof(void*);
+    auto _ZTV9ItemStack = hat::find_pattern(range2, hat::object_to_signature(_ZTI9ItemStack)).get() + sizeof(void*);
+    void** vtFull = reinterpret_cast<void**>(_ZTV9ItemStack);
+    ItemStack_vtable = &vtFull[2];
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include "item/item.h"
+#include "item/itemstack.h"
 #include "shulkerenderer/colors.h"
 #include "item/itemstackbase.h"
 #include "util/scache.h"
@@ -37,7 +38,7 @@ inline void ShulkerBoxBlockItem_appendFormattedHovertext_hook(
     if (!stack || !stack->mUserData)
         return;
 
-    if (!ItemStackBase_loadItem)
+    if (!ItemStackBase_loadItem || !ItemStackBase_ctor || !ItemStack_vtable)
         return;
 
     int index = (reinterpret_cast<uintptr_t>(stack) >> 4) & (SHULKER_CACHE_SIZE - 1);
@@ -82,17 +83,34 @@ inline void ShulkerBoxBlockItem_appendFormattedHovertext_hook(
             continue;
 
         ShulkerSlotCache& sc = ShulkerCache[index][slot];
-        ItemStackBase_loadItem(asISB(sc.isb), tag);
+        ItemStackBase* dst = asISB(sc.isb);
+
+        /*
+        I have just copied the pseudocode of _BuildContainedItemList, tho i very much think that this is not the correct way and we do actually need an ItemStack here
+        But it should work for now without freezes for the most part -_-
+        */
+        if (!sc.isb.constructed) {
+            ItemStackBase_ctor(dst);
+            *(void**)dst = ItemStack_vtable; 
+            sc.isb.constructed = true;
+        }
+
+        ItemStackBase_loadItem(dst, tag);
+
         sc.count = count;
-        ItemStackBase* loaded = asISB(sc.isb);
-        sc.enchanted = hasEnchantmentData(tag) || (loaded && loaded->mUserData && hasEnchantmentData(loaded->mUserData));
+
+        sc.enchanted =
+            hasEnchantmentData(tag) ||
+            (dst && dst->mUserData &&
+             hasEnchantmentData(dst->mUserData));
+
         sc.valid = true;
     }
 
     static const char hex[] = "0123456789abcdef";
     char color = '0';
-    if (Item* item = stack->mItem.get())
-    {
+
+    if (Item* item = stack->mItem.get()) {
         uint16_t id = Item_getId_direct(item);
         color = getShulkerColorCodeFromItemId(id);
     }
