@@ -88,6 +88,7 @@ inline void ShulkerBoxBlockItem_appendFormattedHovertext_hook(
         /*
         I have just copied the pseudocode of _BuildContainedItemList, tho i very much think that this is not the correct way and we do actually need an ItemStack here
         But it should work for now without freezes for the most part -_-
+        Freezes were caused by wrong ItemStackBase Size this is even needed Stack can be fed to Renderer as ItemStackBase
         */
         if (!sc.isb.constructed) {
             ItemStackBase_ctor(dst);

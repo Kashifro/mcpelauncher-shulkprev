@@ -1,12 +1,17 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include "item/itemstackbase.h"
+
+/*todo
+Remove the ItemStackBaseStorage & ShulkerSlotCache and Directly use the Stack to feed the Renderer
+*/
 
 class ItemStackBase;
-//this isnt even required prolly 
+
 struct ItemStackBaseStorage {
     bool constructed = false;         // whether ctor has been called
-    alignas(16) std::byte data[0xA0]; // exact ItemStackBase size
+    alignas(16) std::byte data[sizeof(ItemStackBase)];
 };
 
 static inline ItemStackBase* asISB(ItemStackBaseStorage& s) {

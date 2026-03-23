@@ -10,22 +10,8 @@ class ItemStackBase {
 public:
     WeakPtr<Item>   mItem;        
     CompoundTag*    mUserData;   
-
-    uint8_t _pad_18[0xA0 - 0x18];
-
-    ItemStackBase();
-    ItemStackBase(const ItemStackBase&);
-    ItemStackBase& operator=(const ItemStackBase&);
-    virtual ~ItemStackBase();
-
-    virtual void reinit_item(const Item&, int, int);
-    virtual void reinit_block(const void*, int);
-    virtual void reinit_name(const void*, int, int);
-    virtual void setNull(void*);
-
-    virtual std::string toString() const;
-    virtual std::string toDebugString() const;
-
+    uint8_t _pad_18[0x80 - 0x18];
+    virtual ~ItemStackBase(); //lol idk why removing this virtual makes renderer not work
 };
 
 using ItemStackBase_loadItem_t = void (*)(void* stack, void* compound);
@@ -37,4 +23,8 @@ extern ItemStackBase_getDamageValue_t ItemStackBase_getDamageValue;
 using ItemStackBase_ctor_t = void (*)(ItemStackBase*);
 extern ItemStackBase_ctor_t ItemStackBase_ctor;
 
-static_assert(sizeof(ItemStackBase) == 0xA0, "Incorrect ItemStackBase size");// probs going to cause issues xD
+/*
+The ItemStackBase Ctor makes its last write at
+*(_QWORD *)(a1 + 120) = 0;
+*/
+static_assert(sizeof(ItemStackBase) == 0x80, "Incorrect ItemStackBase size");
