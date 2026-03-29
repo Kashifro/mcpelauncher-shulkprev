@@ -14,9 +14,9 @@ inline void (*_gw_add_keyboard_callback)(
 
 bool spKeyDown = false;
 
-void SP_register_keybinds(){
+void SP_register_keybinds() {
     auto gw = dlopen("libmcpelauncher_gamewindow.so", 0);
-    if (!gw){
+    if (!gw) {
         printf("[ShulkerPreview] cannot open gamewindow lib\n");
         return;
     }
@@ -33,15 +33,16 @@ void SP_register_keybinds(){
         (decltype(_gw_add_keyboard_callback))
             dlsym(gw, "game_window_add_keyboard_callback");
 
-    if (!_gw_add_window_creation_callback || !_gw_get_primary_window || !_gw_add_keyboard_callback){
+    if (!_gw_add_window_creation_callback || !_gw_get_primary_window || !_gw_add_keyboard_callback) {
         printf("[ShulkerPreview] missing keybind functions\n");
         return;
     }
 
-    _gw_add_window_creation_callback(nullptr, [](void *){
+    // Delay keyboard hookup until the real window exists.
+    _gw_add_window_creation_callback(nullptr, [](void*) {
         void* window = _gw_get_primary_window();
 
-        _gw_add_keyboard_callback(window, nullptr, [](void*, int key, int action) -> bool{
+        _gw_add_keyboard_callback(window, nullptr, [](void*, int key, int action) -> bool {
             if (spChangingPreviewKey) {
                 if (action == 0) {
                     spPreviewKey = key;
@@ -66,10 +67,11 @@ void SP_register_keybinds(){
             return false;
         });
 
-    printf(
-        "[ShulkerPreview] Keybind ready (%s)\n",
-        SP_keyCodeToString(spPreviewKey).c_str()
-    ); });
+        printf(
+            "[ShulkerPreview] Keybind ready (%s)\n",
+            SP_keyCodeToString(spPreviewKey).c_str()
+        );
+    });
 
     printf("[ShulkerPreview] Waiting for window...\n");
 }

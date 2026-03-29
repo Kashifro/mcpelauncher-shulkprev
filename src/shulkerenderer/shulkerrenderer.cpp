@@ -1,31 +1,25 @@
 #include "shulkerrenderer.h"
 
 #include <cstdio>
-#include <xmmintrin.h>
+#include <cstring>
 
+#include "colors.h"
+#include "item/item.h"
+#include "item/itemstack.h"
+#include "nbt/nbt.h"
+#include "render/barchelper.h"
+#include "ui/previewui.h"
 #include "util/config.h"
 
 namespace {
-constexpr int kColumns = 9;
-constexpr int kRows = 3;
-constexpr float kSlotStride = 18.0f;
-constexpr float kSlotDrawSize = 17.5f;
-constexpr float kPanelPadding = 6.0f;
-constexpr float kItemDrawSize = 16.0f;
-constexpr float kItemInset = (kSlotStride - kItemDrawSize) * 0.5f;
-constexpr float kCountTextHeight = 6.0f;
 
-const HashedString kFlushMaterial("ui_flush");
-const NinesliceHelper kPanelNineSlice(16.0f, 16.0f, 4.0f, 4.0f);
-const mce::Color kWhite{1.0f, 1.0f, 1.0f, 1.0f};
-
-float clamp01(float v){
-    if(v < 0) return 0;
-    if(v > 1) return 1;
+float clamp01(float v) {
+    if (v < 0) return 0;
+    if (v > 1) return 1;
     return v;
 }
 
-mce::Color applyTintIntensity(const mce::Color& base){
+mce::Color applyTintIntensity(const mce::Color& base) {
     float i = spTintIntensity;
     return {
         clamp01(base.r * i),
@@ -35,361 +29,295 @@ mce::Color applyTintIntensity(const mce::Color& base){
     };
 }
 
-struct CachedUiTextures{
-    bool loaded = false;
-    mce::TexturePtr panel;
-    mce::TexturePtr slot;
+bool getDurabilityInfo(
+    ItemStackBase* stack,
+    int storedDamageValue,
+    int& remaining,
+    float& ratio)
+{
+    if (!ItemStackBase_getDamageValue)
+        return false;
+
+    Item* item = stack->mItem.get();
+    if (!item)
+        return false;
+
+    short maxDamage = item->getMaxDamage();
+    if (maxDamage <= 0)
+        return false;
+
+    short damage = ItemStackBase_getDamageValue(stack);
+    if (damage <= 0 && storedDamageValue > 0)
+        damage = static_cast<short>(storedDamageValue);
+    if (damage <= 0)
+        return false;
+
+    remaining = maxDamage - damage;
+    if (remaining < 0)
+        remaining = 0;
+    ratio = static_cast<float>(remaining) / static_cast<float>(maxDamage);
+    return true;
+}
+
+struct ShulkerSlotRenderData {
+    void* itemTag = nullptr;
+    uint8_t count = 0;
+    bool valid = false;
+    bool hasGlint = false;
+    int damageValue = -1;
 };
 
-inline bool hasTexture(const mce::TexturePtr& tex){
-    return (bool)tex.mClientTexture;
-}
+struct alignas(16) StackStorage {
+    std::byte bytes[sizeof(ItemStackBase)];
+};
 
-template <typename Fn>
-void forEachSlot(float ox,float oy,Fn&& fn){
-    for(int r=0;r<kRows;r++){
-        for(int c=0;c<kColumns;c++){
-            int idx=r*kColumns+c;
-            float x=ox+c*kSlotStride;
-            float y=oy+r*kSlotStride;
-            fn(idx,x,y);
-        }
-    }
-}
-
-ItemStackBase* getRenderableStack(ShulkerSlotCache& cache){
-    if(!cache.valid) return nullptr;
-
-    ItemStackBase* stack = asISB(cache.isb);
-    if(!stack || !stack->mItem.get()) return nullptr;
-
-        return stack;
-}
-
-bool hasEnchantedSlots(int cacheIndex){
-    for(int i=0;i<SHULKER_SLOT_COUNT;i++){
-        const ShulkerSlotCache& sc=ShulkerCache[cacheIndex][i];
-        if(sc.valid && sc.enchanted) 
-            return true;
-    }
-    return false;
-}
-
-void* getMinecraftGame(void* clientInstance){
-    if(!clientInstance) return nullptr;
-
-    auto** vt = *(void***)clientInstance;
-
-    if(vt && vt[kClientGetMinecraftGameVfIndex]){
-        auto fn = (void*(*)(void*))vt[kClientGetMinecraftGameVfIndex];
-        if(void* r = fn(clientInstance)) 
-            return r;
-    }
-
-    return *(void**)((char*)clientInstance + kClientMinecraftGameOffset);
-}
-
-void destroyBaseActorRenderContext(void* barc){
-    if(!barc) return;
-
-    auto** vt=*(void***)barc;
-    if(!vt || !vt[0]) return;
-
-    auto dtor=(void(*)(void*))vt[0];
-    dtor(barc);
-}
-
-void drawDurabilityBar(
-    MinecraftUIRenderContext& ctx,
-    ItemStackBase* stack,
-    float slotX,
-    float slotY)
+bool buildRenderDataFromNbt(
+    ItemStackBase* hoveredStack,
+    ShulkerSlotRenderData (&slots)[SHULKER_SLOT_COUNT])
 {
-    Item* item = stack->mItem.get();
-    if(!item) return;
+    if (!hoveredStack || !hoveredStack->mUserData)
+        return false;
 
-    short maxDamage=item->getMaxDamage();
-    if(maxDamage<=0) return;
+    auto* list = reinterpret_cast<ListTagLayout*>(getListTag(hoveredStack->mUserData, "Items"));
+    if (!list)
+        list = reinterpret_cast<ListTagLayout*>(getListTag(hoveredStack->mUserData, "items"));
+    if (!list)
+        return false;
 
-    short damage=ItemStackBase_getDamageValue(stack);
-    if(damage<=0) return;
+    for (auto& slot : slots)
+        slot = {};
 
-    float ratio=(float)(maxDamage-damage)/(float)maxDamage;
+    int size = listSize(list);
+    for (int i = 0; i < size; ++i) {
+        void* tag = listAt(list, i);
+        if (!tag)
+            continue;
 
-    float bx=slotX+2.0f;
-    float by=slotY+13.0f;
+        int slotValue = 0;
+        if (!readIntTag(tag, "Slot", slotValue)
+         && !readIntTag(tag, "slot", slotValue))
+            continue;
 
-    RectangleArea bg{
-        bx,
-        bx+13.0f,
-        by,
-        by+2.0f
-    };
+        int countValue = 1;
+        if (!readIntTag(tag, "Count", countValue)
+         && !readIntTag(tag, "count", countValue))
+            countValue = 1;
 
-    ctx.fillRectangle(bg,mce::Color{0,0,0,1},1.0f);
+        if (countValue < 0)   countValue = 0;
+        if (countValue > 255) countValue = 255;
 
+        if (slotValue < 0 || slotValue >= SHULKER_SLOT_COUNT)
+            continue;
 
-    RectangleArea bar{
-        bx,
-        bx+13.0f*ratio,
-        by,
-        by+1.0f
-    };
-
-    ctx.fillRectangle(bar,mce::Color{1.0f-ratio,ratio,0,1},1.0f);
-}
-
-CachedUiTextures& getUiTextures(MinecraftUIRenderContext& ctx){
-    static CachedUiTextures tex;
-
-    if(!tex.loaded){
-        tex.panel=ctx.getTexture(
-            ResourceLocation("textures/ui/dialog_background_opaque",ResourceFileSystem::UserPackage),
-            false);
-
-        tex.slot=ctx.getTexture(
-            ResourceLocation("textures/ui/item_cell",ResourceFileSystem::UserPackage),
-            false);
-
-        tex.loaded=true;
+        auto& slot = slots[slotValue];
+        slot.itemTag = tag;
+        slot.count = static_cast<uint8_t>(countValue);
+        slot.valid = true;
+        slot.hasGlint = containsEnchantmentTagTree(tag);
+        readItemDamageTagValue(tag, slot.damageValue);
     }
 
-    return tex;
+    return true;
 }
 
-void drawPanelTexture(
-    MinecraftUIRenderContext& ctx,
-    const CachedUiTextures& tex,
-    const RectangleArea& rect)
+ItemStackBase* getRenderableStack(
+    ItemStackBase* const (&stacks)[SHULKER_SLOT_COUNT],
+    int slot)
 {
-    if(hasTexture(tex.panel))
-        kPanelNineSlice.draw(ctx,rect,tex.panel.getClientTexture());
+    ItemStackBase* stack = stacks[slot];
+    if (!stack)
+        return nullptr;
+    if (!stack->mItem.get())
+        return nullptr;
+    return stack;
 }
 
-void drawSlotTexture(
-    MinecraftUIRenderContext& ctx,
-    const CachedUiTextures& tex,
-    const RectangleArea& rect)
+void buildTransientStacks(
+    const ShulkerSlotRenderData (&slotData)[SHULKER_SLOT_COUNT],
+    StackStorage (&storage)[SHULKER_SLOT_COUNT],
+    ItemStackBase* (&stacks)[SHULKER_SLOT_COUNT])
 {
-    if(!hasTexture(tex.slot)) return;
+    if (!ItemStackBase_loadItem || !ItemStackBase_ctor)
+        return;
 
-    glm::vec2 pos{rect._x0,rect._y0};
+    static_assert(alignof(StackStorage) >= 16, "Preview stacks must stay 16-byte aligned");
 
-    glm::vec2 size{
-        rect._x1-rect._x0,
-        rect._y1-rect._y0
-    };
+    for (int slot = 0; slot < SHULKER_SLOT_COUNT; ++slot) {
+        if (!slotData[slot].valid || !slotData[slot].itemTag)
+            continue;
 
-    ctx.drawImage(
-        tex.slot.getClientTexture(),
-        pos,size,
-        {0,0},{1,1},
-        false
-    );
-}
+        auto* stack = reinterpret_cast<ItemStackBase*>(storage[slot].bytes);
 
-//text rendering now uses drawDebugText instead of ActiveUIContext */
-void drawStackCountText(
-    MinecraftUIRenderContext& ctx,
-    float slotX,
-    float slotY,
-    const char* text,
-    const TextMeasureData& measure,
-    const CaretMeasureData& caret)
-{
-    float ax=slotX+kSlotDrawSize-0.5f;
-    float ay=slotY+kSlotDrawSize-1.5f;
+        ItemStackBase_ctor(stack);
 
-    RectangleArea r{
-        ax-20.0f,
-        ax,
-        ay-kCountTextHeight,
-        ay
-    };
+        if (ItemStack_vtable)
+            *reinterpret_cast<void***>(stack) = ItemStack_vtable;
 
-    ctx.drawDebugText(
-        r,
-        text,
-        mce::Color{1,1,1,1},
-        ui::TextAlignment::Right,
-        1.0f,
-        measure,
-        caret
-    );
+        ItemStackBase_loadItem(stack, slotData[slot].itemTag);
+
+        if (stack->mItem.get())
+            stacks[slot] = stack;
+    }
 }
 
 void drawSlotIcons(
     MinecraftUIRenderContext& ctx,
-    int cacheIndex,
+    const ShulkerSlotRenderData (&slotData)[SHULKER_SLOT_COUNT],
+    ItemStackBase* const (&stacks)[SHULKER_SLOT_COUNT],
     float ox,
     float oy)
 {
-    if(!BaseActorRenderContext_ctor || !ItemRenderer_renderGuiItemNew)
+    if (!BaseActorRenderContext_ctor || !ItemRenderer_renderGuiItemNew)
         return;
 
-    if(!ctx.mClient || !ctx.mScreenContext)
+    if (!ctx.mClient || !ctx.mScreenContext)
         return;
 
-    // Batch break
-    RectangleArea dummy{-10000,-9999,-10000,-9999};
-    ctx.fillRectangle(dummy, kWhite, 1.0f);
-    ctx.flushImages(kWhite, 1.0f, kFlushMaterial);
+    RectangleArea dummy{-10000, -9999, -10000, -9999};
+    ctx.fillRectangle(dummy, PreviewUi::kWhite, 1.0f);
+    ctx.flushImages(PreviewUi::kWhite, 1.0f, PreviewUi::flushMaterial());
 
-    void* clientInstance=ctx.mClient;
-    void* minecraftGame=getMinecraftGame(clientInstance);
-    if(!minecraftGame) return;
+    void* clientInstance = ctx.mClient;
+    void* minecraftGame = getMinecraftGameFromClient(clientInstance);
+    if (!minecraftGame) return;
 
     alignas(16) std::byte barcStorage[kBarcStorageSize]{};
     void* barc = barcStorage;
 
-    BaseActorRenderContext_ctor(
-        barc,
-        ctx.mScreenContext,
-        clientInstance,
-        minecraftGame
-    );
+    BaseActorRenderContext_ctor(barc, ctx.mScreenContext, clientInstance, minecraftGame);
 
-    void* itemRenderer=
-        *(void**)((std::byte*)barc + kBarcItemRendererOffset);
-
-    if(!itemRenderer){
-        destroyBaseActorRenderContext(barc);
+    void* itemRenderer = getItemRendererFromBarc(barc);
+    if (!itemRenderer) {
+        destroyBaseActorRenderContextInstance(barc);
         return;
     }
 
-  // icon pass
-    forEachSlot(ox,oy,[&](int slot,float x,float y){
+    bool anyGlint = false;
 
-        ShulkerSlotCache& sc=ShulkerCache[cacheIndex][slot];
+    PreviewUi::forEachSlot(ox, oy, [&](int slot, float x, float y) {
+        ItemStackBase* stack = getRenderableStack(stacks, slot);
+        if (!stack) return;
 
-        ItemStackBase* stack=getRenderableStack(sc);
-        if(!stack) return;
+        if (slotData[slot].hasGlint) anyGlint = true;
 
-        float dx=x+kItemInset;
-        float dy=y+kItemInset;
+        float dx = x + PreviewUi::kItemInset;
+        float dy = y + PreviewUi::kItemInset;
 
-        __m128 px=_mm_set1_ps(dx);
-        __m128 py=_mm_set1_ps(dy);
+        float px = dx;
+        float py = dy;
 
         ItemRenderer_renderGuiItemNew(
             itemRenderer,
             barc,
             stack,
-            0,
-            0,
-            0,
-            px,py,
-            1.0f,1.0f,1.0f
+            0, 0, 0,
+            px, py,
+            1.0f, 1.0f, 1.0f
         );
     });
 
-    // glint pass
-    if(hasEnchantedSlots(cacheIndex)){
-        forEachSlot(ox,oy,[&](int slot,float x,float y){
+    if (anyGlint) {
+        PreviewUi::forEachSlot(ox, oy, [&](int slot, float x, float y) {
+            if (!slotData[slot].hasGlint) return;
 
-            ShulkerSlotCache& sc=ShulkerCache[cacheIndex][slot];
-            if(!sc.enchanted) return;
+            ItemStackBase* stack = getRenderableStack(stacks, slot);
+            if (!stack) return;
 
-            ItemStackBase* stack=getRenderableStack(sc);
-            if(!stack) return;
+            float dx = x + PreviewUi::kItemInset;
+            float dy = y + PreviewUi::kItemInset;
 
-            float dx=x+kItemInset;
-            float dy=y+kItemInset;
-
-            __m128 px=_mm_set1_ps(dx);
-            __m128 py=_mm_set1_ps(dy);
+            float px = dx;
+            float py = dy;
 
             ItemRenderer_renderGuiItemNew(
                 itemRenderer,
                 barc,
                 stack,
-                0,
-                1,
-                1,
+                0, 1, 1,
                 px, py,
-                1.0f,1.0f,1.0f
+                1.0f, 1.0f, 1.0f
             );
         });
     }
 
-    destroyBaseActorRenderContext(barc);
+    destroyBaseActorRenderContextInstance(barc);
 }
 
 } // namespace
 
-
-
 void ShulkerRenderer::render(
     MinecraftUIRenderContext* ctx,
-    float x,
-    float y,
-    int index,
+    float tooltipX,
+    float tooltipY,
+    float tooltipWidth,
+    float tooltipHeight,
+    ItemStackBase* hoveredStack,
     char colorCode)
 {
-    if(!ctx)
+    (void)tooltipWidth;
+
+    if (!ctx || !hoveredStack)
+        return;
+    if (!ItemStackBase_loadItem)
         return;
 
-    const mce::Color tint=
-        applyTintIntensity(getShulkerTint(colorCode));
+    ShulkerSlotRenderData slotData[SHULKER_SLOT_COUNT]{};
+    if (!buildRenderDataFromNbt(hoveredStack, slotData))
+        return;
 
-    const CachedUiTextures& tex=getUiTextures(*ctx);
+    ItemStackBase* transientStacks[SHULKER_SLOT_COUNT]{};
+    StackStorage transientStorage[SHULKER_SLOT_COUNT]{};
+    buildTransientStacks(slotData, transientStorage, transientStacks);
 
-    RectangleArea panel{
-        x,
-        x+kColumns*kSlotStride+kPanelPadding*2,
-        y,
-        y+kRows*kSlotStride+kPanelPadding*2
-    };
+    const PreviewUi::Placement placement = PreviewUi::placePanel(
+        *ctx,
+        tooltipX,
+        tooltipY,
+        tooltipHeight,
+        spAnchorAboveTooltip);
 
-    drawPanelTexture(*ctx,tex,panel);
+    float x = placement.x;
+    float y = placement.y;
 
-    ctx->flushImages(tint,1.0f,kFlushMaterial);
+    RectangleArea panel = PreviewUi::makePanelRect(x, y);
 
-    float ox=x+kPanelPadding;
-    float oy=y+kPanelPadding;
+    const mce::Color tint = applyTintIntensity(getShulkerTint(colorCode));
+    const auto& tex = PreviewUi::getTextures(*ctx);
 
-    TextMeasureData measure{};
-    measure.fontSize=1.0f;
-    measure.renderShadow=true;
+    float ox = x + PreviewUi::kPanelPadding;
+    float oy = y + PreviewUi::kPanelPadding;
 
-    CaretMeasureData caret{};
+    PreviewUi::drawPanel(*ctx, tex, panel);
+    ctx->flushImages(tint, 1.0f, PreviewUi::flushMaterial());
 
-    // slots
-    forEachSlot(ox,oy,[&](int,float sx,float sy){
-        RectangleArea rect{
-            sx,
-            sx+kSlotDrawSize,
-            sy,
-            sy+kSlotDrawSize
-        };
-        drawSlotTexture(*ctx,tex,rect);
+    PreviewUi::forEachSlot(ox, oy, [&](int, float sx, float sy) {
+        PreviewUi::drawSlot(*ctx, tex, PreviewUi::makeSlotRect(sx, sy));
     });
 
-    ctx->flushImages(tint,1.0f,kFlushMaterial);
+    ctx->flushImages(tint, 1.0f, PreviewUi::flushMaterial());
 
-    drawSlotIcons(*ctx,index,ox,oy);
+    drawSlotIcons(*ctx, slotData, transientStacks, ox, oy);
 
-    forEachSlot(ox,oy,[&](int slot,float sx,float sy){
-        ShulkerSlotCache& sc=ShulkerCache[index][slot];
-        if(!sc.valid) return;
-
-        ItemStackBase* stack=asISB(sc.isb);
-        if(!stack) return;
-
-        drawDurabilityBar(*ctx,stack,sx,sy);
-    });
-
-    // counts
-    forEachSlot(ox,oy,[&](int slot,float sx,float sy){
-        ShulkerSlotCache& sc=ShulkerCache[index][slot];
-        if(!sc.valid || sc.count<=1)
+    PreviewUi::forEachSlot(ox, oy, [&](int slot, float sx, float sy) {
+        if (!slotData[slot].valid)
             return;
 
-        char txt[8];
-        std::snprintf(txt,sizeof(txt),"%u",sc.count);
+        ItemStackBase* stack = transientStacks[slot];
+        if (!stack) return;
 
-        drawStackCountText(*ctx,sx,sy,txt,measure,caret);
+        int remaining = 0;
+        float ratio = 0.0f;
+
+        if (getDurabilityInfo(stack, slotData[slot].damageValue, remaining, ratio)) {
+            PreviewUi::drawDurabilityBar(*ctx, sx, sy, ratio);
+        }
+
+        if (slotData[slot].count > 1) {
+            char txt[8];
+            std::snprintf(txt, sizeof(txt), "%u", slotData[slot].count);
+            PreviewUi::drawStackCountText(*ctx, sx, sy, txt);
+        }
     });
 
-    ctx->flushText(0.0f,std::nullopt);
+    ctx->flushText(0.0f, std::nullopt);
 }

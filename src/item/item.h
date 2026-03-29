@@ -1,8 +1,8 @@
 #pragma once
 
+// Only the vtable shape and getMaxDamage() matter for preview rendering.
 class Item {
 public:
-    //null entries are for index, i intend to fill this up
     virtual ~Item();
     virtual void vfunc1() = 0;
     virtual void vfunc2() = 0;

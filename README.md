@@ -12,6 +12,7 @@ Hover a shulker box item tooltip and press `H` (default) to toggle the preview p
 From Mods -> `Shulker Preview`, you can:
 - Change the preview keybind
 - Adjust tint intensity (only scales brightness)
+- Change the Position of the preview.
 
   ![Config](2.png)
 ## Building
@@ -26,10 +27,16 @@ Replace `/path/to/ndk` with your Android NDK path:
 ```bash
 cmake -S . -B build \
   -DCMAKE_TOOLCHAIN_FILE=/path/to/ndk/build/cmake/android.toolchain.cmake \
-  -DANDROID_ABI=x86_64 \
+  -DANDROID_PLATFORM=21 \
+  -DANDROID_ABI=<abi> \
   -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake --build build-<abi> --target shulke
 ```
+
+Supported ABIs:
+
+- `x86_64`
+- `arm64-v8a`
 
 This produces `libshulke.so` in `build/`. Install it as described in [Usage](#usage).
 

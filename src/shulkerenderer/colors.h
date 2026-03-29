@@ -41,7 +41,7 @@ static inline mce::Color getShulkerTint(char code)
 {
     switch (code)
     {
-        case '0': return {0.45f,0.42f,0.40f,1.0f}; // undyed
+        case '0': return {0.56f,0.38f,0.56f,1.0f}; //undyed
         case '1': return {0.78f,0.76f,0.74f,1.0f}; // white
         case '2': return {0.55f,0.53f,0.52f,1.0f}; // light gray
         case '3': return {0.32f,0.31f,0.30f,1.0f}; // gray

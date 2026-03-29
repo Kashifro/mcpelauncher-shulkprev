@@ -7,19 +7,24 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_VISIBILITY_PRESET default)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN OFF)
 
+# When cross-compiling for Android, the NDK toolchain sets
+# CMAKE_SYSTEM_PROCESSOR from the selected ANDROID_ABI.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+    message(STATUS "Configuring for arm64-v8a")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    message(STATUS "Configuring for x86_64")
+else()
+    message(FATAL_ERROR
+        "Unsupported processor: ${CMAKE_SYSTEM_PROCESSOR}. "
+        "Only x86_64 and arm64-v8a are supported.")
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(libhat
     GIT_REPOSITORY https://github.com/BasedInc/libhat.git
     EXCLUDE_FROM_ALL
 )
-
-FetchContent_Declare(safetyhook
-    GIT_REPOSITORY https://github.com/cursey/safetyhook.git
-    GIT_TAG origin/main)
-
-FetchContent_Declare(zydis
-    GIT_REPOSITORY https://github.com/zyantific/zydis.git)
 
 FetchContent_Declare(properties-parser
     GIT_REPOSITORY https://github.com/minecraft-linux/properties-parser.git
@@ -33,8 +38,6 @@ FetchContent_Declare(glm
 
 FetchContent_MakeAvailable(
     libhat
-    safetyhook
-    zydis
     properties-parser
     glm
 )
@@ -47,9 +50,8 @@ add_library(shulke SHARED
     src/ui/nineslicehelper.cpp
     src/shulkerenderer/shulkerrenderer.cpp
     src/util/keybinds.cpp
-    src/util/config.cpp
     src/util/modmenu.cpp
-    src/util/scache.cpp
+    src/util/config.cpp
 )
 
 target_include_directories(shulke PUBLIC
@@ -60,8 +62,6 @@ target_link_libraries(shulke PUBLIC
     glm::glm
     libhat::libhat
     properties-parser
-    safetyhook::safetyhook
-    Zydis::Zydis
 )
 
 target_link_options(shulke PRIVATE
@@ -69,7 +69,7 @@ target_link_options(shulke PRIVATE
 )
 
 set_target_properties(shulke PROPERTIES
-    OUTPUT_NAME "shulke"
+    OUTPUT_NAME shulke
 )
 
 install(TARGETS shulke LIBRARY DESTINATION mods)

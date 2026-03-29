@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
-#include <string>
+#include <cstdint>
+#include <cstring>
 
 struct NbtTreeKey {
     const char* data;
@@ -9,7 +10,7 @@ struct NbtTreeKey {
 
 using Nbt_treeFind_t = void* (*)(void* tree, const NbtTreeKey* key);
 extern Nbt_treeFind_t Nbt_treeFind;
-///
+
 struct ListTagLayout {
     void* vtable;
     void* begin;
@@ -40,15 +41,54 @@ inline void* nodePayload(void* node) {
     return reinterpret_cast<std::byte*>(node) + 56;
 }
 
+inline std::byte* nodeValue(void* node) {
+    return reinterpret_cast<std::byte*>(node) + 64;
+}
+
 template <std::size_t N>
 inline bool containsTag(void* compound, const char (&key)[N]) {
     return treeFindNode(compound, key, N - 1) != nullptr;
+}
+
+inline bool containsTag(void* compound, const char* key) {
+    if (!key)
+        return false;
+    return treeFindNode(compound, key, std::strlen(key)) != nullptr;
 }
 
 template <std::size_t N>
 inline void* getListTag(void* compound, const char (&key)[N]) {
     void* node = treeFindNode(compound, key, N - 1);
     if (!node || nodeType(node) != 9)
+        return nullptr;
+
+    return nodePayload(node);
+}
+
+inline void* getListTag(void* compound, const char* key) {
+    if (!key)
+        return nullptr;
+    void* node = treeFindNode(compound, key, std::strlen(key));
+    if (!node || nodeType(node) != 9)
+        return nullptr;
+
+    return nodePayload(node);
+}
+
+template <std::size_t N>
+inline void* getCompoundTag(void* compound, const char (&key)[N]) {
+    void* node = treeFindNode(compound, key, N - 1);
+    if (!node || nodeType(node) != 10)
+        return nullptr;
+
+    return nodePayload(node);
+}
+
+inline void* getCompoundTag(void* compound, const char* key) {
+    if (!key)
+        return nullptr;
+    void* node = treeFindNode(compound, key, std::strlen(key));
+    if (!node || nodeType(node) != 10)
         return nullptr;
 
     return nodePayload(node);
@@ -80,7 +120,7 @@ inline void* listAt(ListTagLayout* list, int index) {
     return items[index];
 }
 
-inline bool hasEnchantmentData(void* compound) {
+inline bool containsEnchantmentTag(void* compound) {
     if (!compound || !Nbt_treeFind)
         return false;
 
@@ -91,25 +131,75 @@ inline bool hasEnchantmentData(void* compound) {
            containsTag(compound, "minecraft:stored_enchantments");
 }
 
+inline bool containsEnchantmentTagTree(void* compound) {
+    if (!compound)
+        return false;
+    if (containsEnchantmentTag(compound))
+        return true;
+
+    void* nestedTag = getCompoundTag(compound, "tag");
+    if (nestedTag && containsEnchantmentTagTree(nestedTag))
+        return true;
+
+    void* componentsTag = getCompoundTag(compound, "components");
+    return componentsTag && containsEnchantmentTagTree(componentsTag);
+}
+
 template <std::size_t N>
 inline bool readIntTag(void* compound, const char (&key)[N], int& outValue) {
     void* node = treeFindNode(compound, key, N - 1);
     if (!node)
         return false;
-
-    auto* base = reinterpret_cast<std::byte*>(node) + 64;
-
     switch (nodeType(node)) {
     case 1:
-        outValue = *reinterpret_cast<uint8_t*>(base);
+        outValue = *reinterpret_cast<uint8_t*>(nodeValue(node));
         return true;
     case 2:
-        outValue = *reinterpret_cast<uint16_t*>(base);
+        outValue = *reinterpret_cast<uint16_t*>(nodeValue(node));
         return true;
     case 3:
-        outValue = *reinterpret_cast<int32_t*>(base);
+        outValue = *reinterpret_cast<int32_t*>(nodeValue(node));
         return true;
     default:
         return false;
     }
+}
+
+inline bool readIntTag(void* compound, const char* key, int& outValue) {
+    if (!key)
+        return false;
+    void* node = treeFindNode(compound, key, std::strlen(key));
+    if (!node)
+        return false;
+
+    switch (nodeType(node)) {
+    case 1:
+        outValue = *reinterpret_cast<uint8_t*>(nodeValue(node));
+        return true;
+    case 2:
+        outValue = *reinterpret_cast<uint16_t*>(nodeValue(node));
+        return true;
+    case 3:
+        outValue = *reinterpret_cast<int32_t*>(nodeValue(node));
+        return true;
+    default:
+        return false;
+    }
+}
+
+inline bool readItemDamageTagValue(void* compound, int& outValue) {
+    if (!compound)
+        return false;
+
+    if (readIntTag(compound, "Damage", outValue) ||
+        readIntTag(compound, "damage", outValue) ||
+        readIntTag(compound, "minecraft:damage", outValue))
+        return true;
+
+    void* nestedTag = getCompoundTag(compound, "tag");
+    if (nestedTag && readItemDamageTagValue(nestedTag, outValue))
+        return true;
+
+    void* componentsTag = getCompoundTag(compound, "components");
+    return componentsTag && readItemDamageTagValue(componentsTag, outValue);
 }

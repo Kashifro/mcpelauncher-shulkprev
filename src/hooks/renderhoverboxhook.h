@@ -11,10 +11,14 @@ using RenderHoverBoxFn = void (*)(void*, MinecraftUIRenderContext*, void*, void*
 
 inline RenderHoverBoxFn HoverRenderer_renderHoverBox_orig = nullptr;
 
-static inline int hex(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return 0;
+inline int decodeHexNibble(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
 }
 
 inline void HoverRenderer_renderHoverBox_hook(
@@ -33,37 +37,40 @@ inline void HoverRenderer_renderHoverBox_hook(
         return;
     }
 
-    //toggle prev key
     if (!spKeyDown && sWasToggleKeyDown)
         sPreviewEnabled = !sPreviewEnabled;
     sWasToggleKeyDown = spKeyDown;
 
     if (!sPreviewEnabled)
         return;
-
+    
     const std::string& text = self->mFilteredContent;
 
-    //marker
     if (text.find("\xC2\xA7v") == std::string::npos)
         return;
 
-    //prefix must contain §H§L§C
     if (text.size() < 9)
         return;
-    //decode cache index
-    char hi = text[2];
-    char lo = text[5];
-    int index = (hex(hi) << 4) | hex(lo);
-    index &= (SHULKER_CACHE_SIZE - 1);
 
-    if (index < 0 || index >= SHULKER_CACHE_SIZE)
+    int hi = decodeHexNibble(text[2]);
+    int lo = decodeHexNibble(text[5]);
+    if (hi < 0 || lo < 0)
         return;
 
-    // decode color code
+    ItemStackBase* hoveredStack =
+        lookupTooltipPreviewStack(static_cast<unsigned char>((hi << 4) | lo));
+    if (!hoveredStack)
+        return;
+
     char colorCode = text[8];
 
-    float px = self->mCursorX + self->mOffsetX;
-    float py = self->mCursorY + self->mOffsetY + self->mBoxHeight;
-
-    ShulkerRenderer::render(ctx, px, py, index, colorCode);
+    ShulkerRenderer::render(
+        ctx,
+        self->mCursorX + self->mOffsetX,
+        self->mCursorY + self->mOffsetY,
+        self->mBoxWidth,
+        self->mBoxHeight,
+        hoveredStack,
+        colorCode
+    );
 }

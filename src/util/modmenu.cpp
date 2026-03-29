@@ -97,6 +97,11 @@ void onTintIntensityWindowClosed(void*) {
     SP_saveConfig();
 }
 
+void toggleAnchorMode(void*) {
+    spAnchorAboveTooltip = !spAnchorAboveTooltip;
+    SP_saveConfig();
+}
+
 void rebuildTintIntensityControls() {
     tintIntensityControls[0].type = 3;
     tintIntensityControls[0].data.text.label = const_cast<char*>(tintIntensityHeader.c_str());
@@ -189,7 +194,7 @@ void SP_initModMenu() {
     }
 
     static MenuEntryABI rootEntry{};
-    static MenuEntryABI subEntries[2]{};
+    static MenuEntryABI subEntries[3]{};
 
     subEntries[0].name = "Change preview key";
     subEntries[0].user = nullptr;
@@ -207,6 +212,13 @@ void SP_initModMenu() {
     subEntries[1].click = [](void*) { SP_showTintIntensityWindow(); };
     subEntries[1].length = 0;
     subEntries[1].subentries = nullptr;
+
+    subEntries[2].name = "Show above tooltip";
+    subEntries[2].user = nullptr;
+    subEntries[2].selected = [](void*) -> bool { return spAnchorAboveTooltip; };
+    subEntries[2].click = toggleAnchorMode;
+    subEntries[2].length = 0;
+    subEntries[2].subentries = nullptr;
 
     rootEntry.name = "Shulker Preview";
     rootEntry.user = nullptr;
